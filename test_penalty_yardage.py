@@ -179,6 +179,34 @@ class PenaltyYardageTests(unittest.TestCase):
         self.assertTrue(game._kick_offside(dr, p, {'type': 'field_goal', 'made': False}))
         self.assertEqual((dr.yardline, dr.down, dr.togo), (25, 4, 2))
 
+    def test_made_field_goal_offside_takes_available_first_down(self):
+        dr = self.drive(18, down=4, togo=1)
+        dr.clock, dr.score_diff = 2122, 14  # Q2 5:22, GB at NE 18
+        p = self.flag(False, 'Defensive Offside', 5)
+        p.update(phase='kick_offside', auto_first=False)
+        kick = dict(type='field_goal', made=True, points=3)
+        self.assertTrue(game._kick_offside(dr, p, kick, half_end=1800))
+        self.assertEqual((dr.yardline, dr.down, dr.togo), (13, 1, 10))
+        self.assertTrue(kick['nullified'])
+        self.assertEqual(dr.points, 0)
+
+    def test_offside_keeps_decisive_or_half_expiring_field_goal(self):
+        for clock, quarter, diff, wall, wins in (
+                (1803, 2, -10, 1800, False),
+                (3, 4, -3, None, False),
+                (3, 4, -2, None, False),
+                (100, 5, 0, None, True)):
+            with self.subTest(clock=clock, quarter=quarter, diff=diff):
+                dr = self.drive(18, down=4, togo=1)
+                dr.clock, dr.quarter, dr.score_diff = clock, quarter, diff
+                dr.field_goal_wins = wins
+                p = self.flag(False, 'Defensive Offside', 5)
+                p.update(phase='kick_offside', auto_first=False)
+                kick = dict(type='field_goal', made=True, points=3)
+                self.assertFalse(game._kick_offside(dr, p, kick, half_end=wall))
+                self.assertNotIn('nullified', kick)
+                self.assertEqual(dr.yardline, 18)
+
     def test_kickoff_return_foul_moves_receiving_team_back(self):
         p = self.flag(True, 'Illegal Block in Back', 10)
         p['phase'] = 'return'

@@ -2452,14 +2452,15 @@ def _kickoff_adjustment(pending, kicking_pos):
     return 15 if beneficiary == kicking_pos else -15
 
 
-def _kick_offside(dr, pen, kick, book=None):
+def _kick_offside(dr, pen, kick, book=None, half_end=None):
     """The kicking side may keep a made FG or a good punt; otherwise it can replay the down."""
     if not pen or pen.get('phase') != 'kick_offside':
         return False
-    if kick.get('made'):
+    walk = min(pen['yards'], dr.yardline / 2.0)
+    take_first = walk >= dr.togo and _roughing_take_downs(dr, half_end=half_end)
+    if kick.get('made') and not take_first:
         kick['declined_penalty'] = PP.decision(pen, False); PP.book_flag(book, pen)
         return False
-    walk = min(pen['yards'], dr.yardline / 2.0)
     if kick.get('type') == 'punt' and not kick.get('blocked') and walk < dr.togo:
         kick['declined_penalty'] = PP.decision(pen, False); PP.book_flag(book, pen)
         return False
@@ -2970,7 +2971,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             if _kick_roughing(dr, flag, fg, book, aggression, half_end, must_score):
                 dr.clock = max(wall, dr.clock - play_seconds('field_goal'))
                 continue
-            if _kick_offside(dr, flag, fg, book):
+            if _kick_offside(dr, flag, fg, book, half_end=half_end):
                 dr.clock = max(wall, dr.clock - play_seconds('field_goal'))
                 continue
             if book is not None: book.special('fg', fg['kicker_pid'], **fg)
@@ -3009,7 +3010,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 if _kick_roughing(dr, flag, fg, book, aggr4, half_end, must_score):
                     dr.clock = max(wall, dr.clock - play_seconds('field_goal'))
                     continue
-                if _kick_offside(dr, flag, fg, book):
+                if _kick_offside(dr, flag, fg, book, half_end=half_end):
                     dr.clock = max(wall, dr.clock - play_seconds('field_goal'))
                     continue
                 if book is not None: book.special('fg', fg['kicker_pid'], **fg)
@@ -3036,7 +3037,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                 if _kick_roughing(dr, flag, p, book):
                     dr.clock -= play_seconds('punt')
                     continue
-                if _kick_offside(dr, flag, p, book):
+                if _kick_offside(dr, flag, p, book, half_end=half_end):
                     dr.clock -= play_seconds('punt')
                     continue
                 if p.get('how') == 'return':
