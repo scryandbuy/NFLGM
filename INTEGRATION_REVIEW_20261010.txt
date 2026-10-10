@@ -1,0 +1,110 @@
+NFL GM Sim integration review - October 10, 2026
+
+Release base and provenance
+The isolated codex/full-integration-20261010 checkout starts at e6a32c6.
+It includes 87c2bb0 (primary team colors, no Team Stats abbreviation pair)
+and e6a32c6 (bounded newest-first player history). GitHub main was checked
+directly before packaging and remains 1b346af8a2d0fff7f450a85658a05962066ca37f.
+The old bundle was pushed; today's changes have not been pushed.
+
+Changes (3): clean personal-negotiations checkout, fast-forwarded through
+3af51e6 and fc76afe. Includes staged player/GM discussions, full proposal
+flows, position filters, saved conversations/counters, and correctly applied
+pick concessions. Read the two NEGOTIATION/PERSONAL review files for observed
+asset-level results, action/restraint evidence and calibration limits.
+
+Changes (4): reconciled the ready source slices from the preserved dirty
+nflgm-post-push-integration checkout: game.py, playcall.py, season.py,
+game_substitutions.py, new season_rest_context.py, and five focused test files.
+These preserve planned end-zone attempts through audibles, prevent a consumed
+untimed-down flag from bypassing expiration, preserve an onside recovery chance
+when both time estimates floor to zero, and permit conservative late-season
+rest/evaluation only for proven locked seeds or eliminated teams. Summary,
+recap, and field-goal/offside tests in that tree were already integrated;
+they were compared instead of copying the whole dirty checkout.
+
+Football review
+Rest is optional, with coach, age, health and ready-reserve differences. A
+clinched berth alone is insufficient; unclear ties/standings retain normal
+play. Young starters, injured/unready reserves and playoff games exercise
+restraint. Controlled tests verify an eligible reserve actually receives a
+field snap, without rewriting permanent depth ordering. Onside fallback still
+respects the existing ahead/tied, expired-clock and hopeless-deficit guards.
+No new league-wide transaction valuation or balance tuning was introduced.
+The Campbell-Darrisaw controlled-young-starter test and materially better
+alternative/GM-personality tests pass. Negotiation observations include
+inadequate offers still rejected and valid near-boundary pick deals accepted;
+those selected samples are not a league-wide acceptance rate.
+
+Primary references reviewed for these existing behavior decisions:
+https://operations.nfl.com/rules-officiating/2026-nfl-rulebook
+https://www.chargers.com/news/falcons-at-chargers-game-recap-121320
+https://www.chiefs.com/news/five-things-to-watch-on-sunday-chiefs-vs-chargers
+The negotiation review records the Eagles' primary accounts and official
+Football Manager interaction references. Sources support the patterns;
+probabilities and concession caps remain game abstractions.
+
+Portable export improvement
+Session.export_chunks yields lossless gzip blocks directly to the browser.
+Compression uses level 9 and fast record-level JSON encoding. Transfers are
+chunked; no full-save string crosses the Python/JavaScript bridge and no second
+compressed MEMFS file is retained. Individual JSON records may exceed a transfer
+chunk; this is not a claim of a hard global memory bound. A modal progress view
+pauses game actions and autosave snapshots during export, yields to painting,
+cleans up generators/proxies, resumes pending autosaves/routes, and reports errors.
+Native export_file consumes the same generator. Legacy JSON and gzip imports work.
+This does not delete history or incorporate the unfinished development overhaul.
+
+Observed browser/file evidence
+Source: user's untouched nflgm-2034-week-6.json.gz (29,665,487 bytes).
+Original SHA256: baab37aa8e4d6b82c987f86aa5c1a15d6f57336da4bd58405a70cf0993aca979.
+Two full-game exports: 28,272,433 bytes each, identical compressed hashes.
+Reduction vs existing gzip: 1,393,054 bytes (4.70%); decoded save 223,803,779 bytes.
+Compressed SHA256: f399274a54b9cdaf70d8d14d060d94a721e749b6fd417eb8b441d270de13e162.
+All original fields match recursively. Only empty trade_discussions and each
+team's empty season_rest state were added by the integrated feature migrations.
+Full-game re-import retained GB, 2034 week 6, 5-1, 52 active and $13.3m cap room.
+Separate browser audit exported in 16.59 seconds, reloaded, and matched franchise
+identity and RNG. Prior exporter audit took 20.75 seconds on this fixture.
+Decoded SHA256: 6ce9a52372a7638f8edadd20e0faa5f408460a53ba936cbf5daa297d22ef74b2.
+No crash was observed in these successful runs. A prior reported crash's exact
+cause is unproven; these results do not guarantee every device/save size.
+Browser download event waits timed out even though files completed on disk;
+download integrity and actual re-import, rather than that event, establish success.
+
+Validation
+181 tests passed in combined gameplay/negotiation/export/build suites.
+53 passed in additional contract, draft-investment, trade and save suites
+(overlaps exist; do not add these as unique-test counts).
+13 JavaScript suites passed, including compression/import failure cleanup,
+export lifecycle, deferred autosave, negotiation stages, Sign Today, trade
+feedback, draft navigation, inbox and overtime recap. A stale autosave test mock
+was corrected to use the already-existing incremental snapshot protocol.
+JavaScript syntax, build validation and git diff --check passed.
+Browser build 6ef3d36235 contains 149 modules and 10 data files.
+This was targeted validation, not a full repository or multi-season balance run.
+
+Inventory and explicit exclusions
+All registered worktrees were enumerated with HEAD/branch, committed divergence,
+modified files and individually listed untracked files. A separate release
+inventory preserves paths, sizes, hashes for small files and patch equivalence.
+Historical worktrees contain cherry-picks with changed generated build stamps,
+old experiments, audit outputs and fixtures; non-ancestor commits alone do not
+establish a missing feature. Handoff mappings were used for ready source ownership.
+No other checkout was reset, cleaned, committed or overwritten by this release.
+
+Changes (2), natural-development study: retained outside release. Its history
+compaction is tested locally (341 MB to 76 MB development data), but depends on
+the unfinished automatic-development integration. Reload age/GM-decision gaps
+are actively being corrected, and broader career validation remains pending.
+The old standalone QB-aging patch predates newer approved calibrations; it is
+not silently applied. This release does not claim to ship those aging changes.
+Changes (3), new League Stats expansion: isolated work based on fc76afe, explicitly
+in progress at cutoff, excluded. Completed negotiations remain included.
+Scramble pursuit candidates: explicit SCRAMBLE_RELEASE_HOLD remains in force;
+individual long-touchdown outcomes failed realism review. Preserve all variants.
+Other historical dirty experiments and generated fixtures remain in their source
+trees; only verified ready feature slices are release inputs.
+
+Bundle and live deployment are separate. Verify/fetch the delivered named ref,
+then use a normal fast-forward push to main. Never force-push on rejection.

@@ -3428,3 +3428,9 @@ dialog.retain-dialog .retain-dialog-actions{flex-wrap:wrap}
 .neg-closed {text-align:center;opacity:.7}
 @keyframes neg-enter {from {opacity:0;transform:translateY(7px)}to {opacity:1;transform:none}}
 @media(prefers-reduced-motion:reduce){.neg-conversation,.neg-counter {animation:none}.neg-choices .btn {transition:none}.neg-choices .btn:hover {transform:none}}
+
+.export-progress{position:fixed;inset:0;margin:auto;width:min(420px,calc(100vw - 32px));padding:24px;color:var(--ink);background:var(--sheet);border:1px solid var(--rule);border-radius:8px;font-family:var(--text)}
+.export-progress::backdrop{background:#05090dbb}
+.export-progress h2{margin:0 0 16px;font-size:20px}
+.export-progress progress{width:100%;accent-color:var(--club-2)}
+.export-progress p{color:var(--ink-2);font-size:14px}

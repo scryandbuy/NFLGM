@@ -15,7 +15,19 @@ value=4;ctx.queueAutosave();ctx.document.visibilityState='hidden';events.visibil
 value=5;ctx.queueAutosave();assert.equal(frames.size,0);microtasks.shift()();assert.equal(snapshots.at(-1),5,'hidden actions do not depend on frames');
 ctx.document.visibilityState='visible';value=6;ctx.queueAutosave();timer(200);assert.equal(snapshots.at(-1),6,'throttled frame fallback persists');assert.equal(frames.size,0);
 // Explicit save captures all pending mutations and cancels a redundant autosave.
-ctx.saveConflict=false;ctx.py={runPython:()=>String(value)};ctx.busy=()=>{};ctx.queueSave=(kind,text)=>{snapshots.push(Number(text));return Promise.resolve();};
+let sentBatch=false;
+ctx.saveConflict=false;ctx.py={runPython:code=>{
+ if(code==='SESSION.begin_incremental()'){sentBatch=false;return;}
+ if(code==='SESSION.next_incremental_batch()'){
+  if(sentBatch)return null;sentBatch=true;return JSON.stringify({puts:{value}});
+ }
+ throw Error('Unexpected save command: '+code);
+}};ctx.busy=()=>{};ctx.queueSave=(kind,snapshot)=>{snapshots.push(snapshot.puts.value);return Promise.resolve();};
 vm.runInContext(src.slice(src.indexOf('function saveGame('),src.indexOf('async function saveGameNotified(')),ctx);
 value=7;ctx.queueAutosave();ctx.saveGame();assert.equal(snapshots.at(-1),7);assert.equal(frames.size,0);assert.equal(timers.size,0);events.pagehide();assert.equal(snapshots.filter(x=>x===7).length,1);
+// Export retains pending autosaves without taking a second snapshot mid-stream.
+value=8;ctx.queueAutosave();vm.runInContext('exportInProgress=true;cancelAutosaveSchedule()',ctx);
+events.pagehide();assert.equal(snapshots.at(-1),7);
+vm.runInContext('exportInProgress=false;queueAutosave()',ctx);frame();timer(0);
+assert.equal(snapshots.at(-1),8);
 console.log('Autosave paints first, coalesces rapid actions, captures on pagehide/hidden, and preserves explicit save');

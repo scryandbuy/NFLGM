@@ -142,24 +142,31 @@ async function saveImportStream(source) {
   return blob.stream();
 }
 
-function exportSessionBlob() {
-  const path = '/nflgm-export-save.json.gz';
-  let file = null;
+async function exportSessionBlob(onProgress = () => {}) {
+  let started = false;
   try {
-    // Capture synchronously: game actions cannot change the franchise mid-export.
-    py.runPython("SESSION.export_file('/nflgm-export-save.json.gz')");
-    file = py.FS.open(path, 'r');
-    const blocks = [], buffer = new Uint8Array(256 * 1024);
+    py.runPython('_EXPORT_CHUNKS = SESSION.export_chunks()');
+    started = true;
+    const blocks = [];
+    let bytes = 0;
     for (;;) {
-      const count = py.FS.read(file, buffer, 0, buffer.length);
-      if (!count) break;
-      // Blob copies the bytes before the reusable transfer buffer changes.
-      blocks.push(new Blob([buffer.subarray(0, count)]));
+      const chunk = py.runPython('next(_EXPORT_CHUNKS, None)');
+      if (chunk == null) break;
+      try {
+        const buffer = chunk.toJs();
+        if (buffer.byteLength) {
+          blocks.push(new Blob([buffer]));
+          bytes += buffer.byteLength;
+        }
+      } finally { chunk.destroy(); }
+      onProgress(bytes);
+      // Allow painting and input processing between bounded transfers. The
+      // export dialog and action lock keep this snapshot stable throughout.
+      await new Promise(resolve => setTimeout(resolve, 0));
     }
     return new Blob(blocks, {type: 'application/gzip'});
   } finally {
-    if (file) { py.FS.close(file); file = null; }
-    if (py.FS.analyzePath(path).exists) py.FS.unlink(path);
+    if (started) py.runPython('_EXPORT_CHUNKS.close()\ndel _EXPORT_CHUNKS');
   }
 }
 
@@ -217,7 +224,7 @@ const AUTO_SAVE_METHODS = new Set(['club_act', 'personnel_act', 'frontoffice_act
 const READ_ONLY_ACTIONS = new Set(['personnel_act:ask', 'personnel_act:gather', 'personnel_act:offer_preview', 'frontoffice_act:restructure_preview', 'draft_act:read_trade_up', 'draft_act:offers', 'plan_act:save', 'plan_act:save_failed']);
 AUTO_SAVE_METHODS.add('inbox_roster_dismiss');
 AUTO_SAVE_METHODS.add('dismiss_ceiling_notice');
-let autosaveQueued = false;
+let autosaveQueued = false, exportInProgress = false;
 let autosaveFrame = null, autosaveTimer = null;
 function cancelAutosaveSchedule() {
   if (autosaveFrame !== null) cancelAnimationFrame(autosaveFrame);
@@ -225,7 +232,7 @@ function cancelAutosaveSchedule() {
   autosaveFrame = autosaveTimer = null;
 }
 function flushAutosave() {
-  if (!autosaveQueued) return;
+  if (!autosaveQueued || exportInProgress) return;
   autosaveQueued = false;
   cancelAutosaveSchedule();
   // Capture immediately, even if an earlier IndexedDB write is still pending.
@@ -250,6 +257,7 @@ if (typeof document !== 'undefined') document.addEventListener('visibilitychange
   if (document.visibilityState === 'hidden') void flushAutosave();
 });
 function pyJSON(code) {
+  if (exportInProgress) throw Error('Please wait for the save export to finish.');
   const result = JSON.parse(py.runPython(`_j(${code})`));
   if (result?.plan_state) updateGameplanState(result.plan_state);
   const call = code.match(/^SESSION\.([A-Za-z_][A-Za-z_0-9]*)\(\s*(?:'([^']*)'|"([^"]*)")?/);
@@ -4697,14 +4705,37 @@ async function advanceInner() {
   $('#save').onclick = saveGameNotified;
   document.querySelector('.quick-menu').addEventListener('click', e => { if (e.target.closest('a')) e.currentTarget.open = false; });
   // EXPORT AND IMPORT: the save as a file, for a backup or for sending a state to be looked at
-  $('#export').onclick = () => {
+  $('#export').onclick = async () => {
+    if (exportInProgress) return;
+    if ($('#boot') || draftRunning || gameDayStepBusy || $('#advance').disabled) {
+      notify({ok:false, why:'Wait for the current game action to finish, then export.'}); return;
+    }
+    const st = pyJSON('SESSION.rail_state()'), initialHash = location.hash;
+    const status = el('p', {role:'status'}, 'Preparing your save…');
+    const dialog = el('dialog', {class:'export-progress', 'aria-label':'Exporting save'},
+      el('h2', {}, 'Exporting Save'), status, el('progress', {'aria-label':'Export progress'}),
+      el('p', {}, 'Keep this page open until the download starts.'));
+    dialog.addEventListener('cancel', event => event.preventDefault());
+    document.body.append(dialog); dialog.showModal();
+    exportInProgress = true;
+    cancelAutosaveSchedule();
     try {
-      const st = pyJSON('SESSION.rail_state()'), blob = exportSessionBlob();
+      // Let earlier database writes release their copied records before export.
+      while (saveWriting) await new Promise(resolve => setTimeout(resolve, 20));
+      const blob = await exportSessionBlob(bytes => {
+        status.textContent = `Exporting save… ${(bytes / 1048576).toFixed(1)} MB`;
+      });
       const a = document.createElement('a'), url = URL.createObjectURL(blob);
       a.href = url; a.download = `nflgm-${st.year}-${st.stop}.json.gz`;
       document.body.append(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 30000);
+      notify({ok:true, line:`Save exported (${(blob.size / 1048576).toFixed(1)} MB).`});
     } catch (error) { notify({ok: false, why: 'The export failed: ' + String(error)}); }
+    finally {
+      exportInProgress = false; dialog.close(); dialog.remove();
+      if (autosaveQueued) queueAutosave();
+      if (location.hash !== initialHash) window.dispatchEvent(new HashChangeEvent('hashchange'));
+    }
   };
   $('#import').onclick = () => { if (gameplanUnsaved() || gameplanSaving) { warnUnsavedGameplan(); return; } $('#importfile').click(); };
   $('#importfile').onchange = async e => {
@@ -4715,7 +4746,7 @@ async function advanceInner() {
   };
   $('#back').onclick = () => history.back();
   const fwd = document.querySelector('.hist button[aria-label="Forward"]'); if (fwd) { fwd.disabled = false; fwd.onclick = () => history.forward(); }
-  window.addEventListener('hashchange', event => { if (guardDraftRoute(event) || guardGameplanRoute(event)) return; if (location.hash.startsWith('#portal/inbox/')) openInboxMessage(+location.hash.split('/').pop()); else if (location.hash === '#portal/inbox') { view = pyJSON('SESSION.inbox_view()'); renderInbox(view); } else if (location.hash.startsWith('#portal') || location.hash === '') refresh(); else if (location.hash.startsWith('#gameday')) { const wk = location.hash.split('/')[1]; renderGameDay(pyJSON(wk ? `SESSION.gameday_view(week=${+wk})` : 'SESSION.gameday_view()')); } else if (location.hash.startsWith('#club/team/')) { const parts = location.hash.split('/'); const abbr = parts[2]; const sub = parts[3] || 'roster'; if (sub === 'salaries') renderSalaries(pyJSON(`SESSION.club_salaries(${JSON.stringify(abbr)})`)); else if (sub === 'depth') renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)}, ${JSON.stringify(abbr)})`)); else { clubTab = sub === 'ps' ? 'ps' : sub === 'ir' ? 'ir' : 'active'; renderRoster(pyJSON(`SESSION.club_roster(${JSON.stringify(abbr)})`)); } } else if (location.hash.startsWith('#club/player/')) renderCard(pyJSON(`SESSION.club_card(${JSON.stringify(location.hash.split('/').pop())})`)); else if (location.hash.startsWith('#club/depth')) renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)})`)); else if (location.hash.startsWith('#club')) { if (location.hash === '#club/salaries') renderSalaries(pyJSON('SESSION.club_salaries()')); else if (location.hash === '#club/schedule') renderClubSchedule(pyJSON(`SESSION.league_view('team_schedule')`), true); else if (location.hash === '#club/regression') renderRegression(pyJSON(`SESSION.club_regression()`)); else if (location.hash.startsWith('#club/progression')) renderProgression(pyJSON('SESSION.progression()')); else { clubTab = location.hash.startsWith('#club/ps') ? 'ps' : location.hash.startsWith('#club/ir') ? 'ir' : 'active'; renderRoster(pyJSON('SESSION.club_roster()')); } } else if (location.hash.startsWith('#gameplan')) { const sub = location.hash.split('/')[1] || 'week'; if (sub === 'practice') renderPractice(pyJSON('SESSION.practice_view()')); else if (sub === 'report') renderReport(pyJSON(`SESSION.plan_view('report')`)); else renderThisWeek(pyJSON(`SESSION.plan_view('this_week')`)); } else if (location.hash.startsWith('#league/team/')) { const parts = location.hash.split('/'); const abbr = parts[2]; const sub = parts[3] || ''; if (sub === 'roster' || sub === 'ps') { clubTab = sub === 'ps' ? 'ps' : 'active'; renderRoster(pyJSON(`SESSION.club_roster(${JSON.stringify(abbr)})`)); } else if (sub === 'salaries') renderSalaries(pyJSON(`SESSION.club_salaries(${JSON.stringify(abbr)})`)); else if (sub === 'depth') renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)}, ${JSON.stringify(abbr)})`)); else if (sub === 'schedule') renderClubSchedule(pyJSON(`SESSION.league_view('team_schedule', team=${JSON.stringify(abbr)})`), false); else renderTeam(pyJSON(`SESSION.team_page(${JSON.stringify(abbr)})`)); }
+  window.addEventListener('hashchange', event => { if (exportInProgress) return; if (guardDraftRoute(event) || guardGameplanRoute(event)) return; if (location.hash.startsWith('#portal/inbox/')) openInboxMessage(+location.hash.split('/').pop()); else if (location.hash === '#portal/inbox') { view = pyJSON('SESSION.inbox_view()'); renderInbox(view); } else if (location.hash.startsWith('#portal') || location.hash === '') refresh(); else if (location.hash.startsWith('#gameday')) { const wk = location.hash.split('/')[1]; renderGameDay(pyJSON(wk ? `SESSION.gameday_view(week=${+wk})` : 'SESSION.gameday_view()')); } else if (location.hash.startsWith('#club/team/')) { const parts = location.hash.split('/'); const abbr = parts[2]; const sub = parts[3] || 'roster'; if (sub === 'salaries') renderSalaries(pyJSON(`SESSION.club_salaries(${JSON.stringify(abbr)})`)); else if (sub === 'depth') renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)}, ${JSON.stringify(abbr)})`)); else { clubTab = sub === 'ps' ? 'ps' : sub === 'ir' ? 'ir' : 'active'; renderRoster(pyJSON(`SESSION.club_roster(${JSON.stringify(abbr)})`)); } } else if (location.hash.startsWith('#club/player/')) renderCard(pyJSON(`SESSION.club_card(${JSON.stringify(location.hash.split('/').pop())})`)); else if (location.hash.startsWith('#club/depth')) renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)})`)); else if (location.hash.startsWith('#club')) { if (location.hash === '#club/salaries') renderSalaries(pyJSON('SESSION.club_salaries()')); else if (location.hash === '#club/schedule') renderClubSchedule(pyJSON(`SESSION.league_view('team_schedule')`), true); else if (location.hash === '#club/regression') renderRegression(pyJSON(`SESSION.club_regression()`)); else if (location.hash.startsWith('#club/progression')) renderProgression(pyJSON('SESSION.progression()')); else { clubTab = location.hash.startsWith('#club/ps') ? 'ps' : location.hash.startsWith('#club/ir') ? 'ir' : 'active'; renderRoster(pyJSON('SESSION.club_roster()')); } } else if (location.hash.startsWith('#gameplan')) { const sub = location.hash.split('/')[1] || 'week'; if (sub === 'practice') renderPractice(pyJSON('SESSION.practice_view()')); else if (sub === 'report') renderReport(pyJSON(`SESSION.plan_view('report')`)); else renderThisWeek(pyJSON(`SESSION.plan_view('this_week')`)); } else if (location.hash.startsWith('#league/team/')) { const parts = location.hash.split('/'); const abbr = parts[2]; const sub = parts[3] || ''; if (sub === 'roster' || sub === 'ps') { clubTab = sub === 'ps' ? 'ps' : 'active'; renderRoster(pyJSON(`SESSION.club_roster(${JSON.stringify(abbr)})`)); } else if (sub === 'salaries') renderSalaries(pyJSON(`SESSION.club_salaries(${JSON.stringify(abbr)})`)); else if (sub === 'depth') renderDepth(pyJSON(`SESSION.club_depth(${JSON.stringify(depthPkg)}, ${JSON.stringify(abbr)})`)); else if (sub === 'schedule') renderClubSchedule(pyJSON(`SESSION.league_view('team_schedule', team=${JSON.stringify(abbr)})`), false); else renderTeam(pyJSON(`SESSION.team_page(${JSON.stringify(abbr)})`)); }
     else if (location.hash.startsWith('#league')) { const sub = location.hash.split('/')[1] || 'standings'; const fn = { standings: renderStandings, schedule: renderSchedule, bracket: renderBracket, transactions: renderTransactions, stats: renderStats, awards: renderAwards, coaching: renderCoaching, almanac: renderAlmanac }[sub] || renderStandings; fn(pyJSON(`SESSION.league_view(${JSON.stringify(sub in LG ? sub : 'standings')})`)); } else if (location.hash.startsWith('#draft')) { const sub = location.hash.split('/')[1] || 'board'; if (sub === 'day') renderDraftDay(pyJSON(`SESSION.draft_view('draft_day')`)); else if (sub === 'spring') renderSpring(pyJSON(`SESSION.draft_view('spring')`)); else if (sub === 'picks') renderPicks(pyJSON(`SESSION.draft_view('picks')`)); else if (sub === 'results') renderDraftResults(pyJSON(`SESSION.draft_view('picks')`)); else renderBoard(pyJSON(`SESSION.draft_view('board')`)); } else if (location.hash.startsWith('#frontoffice')) { const sub = location.hash.split('/')[1] || 'owner'; if (sub === 'identity') { idPreview = null; renderIdentity(pyJSON(`SESSION.frontoffice('identity')`)); } else if (sub === 'review') renderReview(pyJSON(`SESSION.frontoffice('season_review')`)); else if (sub === 'exit') renderExit(pyJSON(`SESSION.frontoffice('exit_interviews')`)); else if (sub === 'staff') renderStaff(pyJSON(`SESSION.frontoffice('staff')`)); else if (sub === 'cap') renderCap(pyJSON(`SESSION.frontoffice('cap')`)); else renderOwner(pyJSON(`SESSION.frontoffice('owner')`)); } else if (location.hash.startsWith('#personnel')) { const sub = location.hash.split('/')[1] || 'trades'; if (sub === 'fa') renderFA(pyJSON(`SESSION.personnel('free_agency')`)); else if (sub === 'upcoming') renderUpcomingFA(pyJSON(`SESSION.personnel('upcoming_free_agents')`)); else if (sub === 'wire') renderWire(pyJSON(`SESSION.personnel('waivers')`)); else if (sub === 'retain') renderRetain(pyJSON(`SESSION.personnel('retain')`)); else if (sub === 'extensions') renderExtensions(pyJSON(`SESSION.personnel('extensions')`)); else { if (!tradeState.keep) { tradeState.a = []; tradeState.b = []; tradeState.counter_id = null; } tradeState.keep = false; renderTrades(pyJSON(`SESSION.personnel('trades'${tradeState.other ? ', other=' + JSON.stringify(tradeState.other) : ''}, a_sends=${JSON.stringify(tradeState.a)}, b_sends=${JSON.stringify(tradeState.b)})`)); } } else { const page = $('#page'); page.innerHTML = ''; page.style.gridTemplateColumns = '1fr'; page.append(el('section', { class: 'sheet' }, el('h2', {}, location.hash.slice(1).split('/')[0].replace(/^\w/, c => c.toUpperCase())), el('div', { class: 'empty' }, 'This page is next to be wired.'), el('div', { class: 'foot' }, el('button', { class: 'btn', onclick: () => { location.hash = '#portal'; } }, 'Back to Portal')))); } });
 })();
 

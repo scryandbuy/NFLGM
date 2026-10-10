@@ -1175,6 +1175,12 @@ def _onside_call(clock, need, my_tos, coach, rng):
     v_rec = 1.25 * usable(clock, my_tos)
     v_miss = 0.35 * usable(max(0.0, clock - 2 * PLAY_SECS_RUN - 6.0), my_tos)
     v_onside = (p_rec * v_rec + (1.0 - p_rec) * v_miss) * (0.85 + 0.30 * aggr)   # the gambler likes the gamble
+    # The scoring-drive reserve can erase even the recovery branch. That is
+    # an estimate's floor, not proof that a quick score is impossible. While
+    # still pursuing the comeback, keep the recovery chance when neither
+    # estimate has usable time instead of defaulting to a deep surrender.
+    if v_onside == 0.0 and v_deep == 0.0:
+        return True
     return v_onside > v_deep
 
 
@@ -2859,7 +2865,8 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
             dr.untimed = False; dr.clock = wall + 1.0
         elif getattr(dr, 'untimed', False) and getattr(dr, 'untimed_at', -1) != len(dr.log):
             dr.untimed = False                                 # a snap has been run since the foul: the flag is stale
-        elif dr.clock <= 0:
+        # Clearing a consumed penalty flag must not bypass game expiration.
+        if dr.clock <= 0:
             dr.result = 'End of half'; break
         # THE HALF IS A WALL TOO. Without this the game ran as one continuous
         # 3600 seconds and only ONE drive a game was ever killed by a clock -
@@ -3116,7 +3123,7 @@ def drive_steps(offense, defense, start_yardline, clock, quarter, score_diff,
                       dr.score_diff, ytg_i, rng, secs_left=secs_for_call,
                       offense=offense, rate_fn=rate_fn, lean=(lean_now if (last_shot or late_lean) else olean))
         if last_shot and _pl is not None and _pl['choice'] == 'shot':
-            oc['is_pass'] = True; oc['depth'] = 'deep'; oc['concept'] = 'four_verts'; oc['play_action'] = False; oc['plan_depth'] = True   # the plan's shot: everyone to the end zone
+            oc['is_pass'] = True; oc['depth'] = 'deep'; oc['concept'] = 'four_verts'; oc['play_action'] = False; oc['plan_depth'] = True; oc['end_zone_attempt'] = True   # the plan's shot: everyone to the end zone
         elif _pl is not None and _pl.get('quick_play'):
             oc.update(is_pass=True, depth='short', concept='slant_flat', play_action=False, rpo=False, plan_depth=True)
         elif _pl is not None and _pl['choice'] == 'play' and half_end is None and dr.score_diff < 0:

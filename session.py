@@ -361,21 +361,17 @@ class Session:
     def export_file(self, path):
         """Lossless portable gzip JSON without constructing a full JSON string.
 
-        The browser reads this compressed temporary file in bounded blocks and
-        removes it. Snapshot fields and RNG are identical to save().
+        Native callers can write a file; the browser consumes export_chunks
+        directly. Snapshot fields and RNG are identical to save().
         """
-        import gzip
-        encoder = json.JSONEncoder(default=LG._session_json_default, separators=(',', ':'))
-        with gzip.open(path, 'wb', compresslevel=6) as output:
-            parts, size = [], 0
-            for part in encoder.iterencode(self._save_data()):
-                parts.append(part)
-                size += len(part)
-                if size >= 256 * 1024:
-                    output.write(''.join(parts).encode('utf-8'))
-                    parts, size = [], 0
-            if parts:
-                output.write(''.join(parts).encode('utf-8'))
+        with open(path, 'wb') as output:
+            for block in self.export_chunks():
+                output.write(block)
+
+    def export_chunks(self):
+        """Consume with game actions paused; snapshot records reference live state."""
+        from portable_export import chunks
+        yield from chunks(self._save_data(), LG._session_json_default)
 
     def save_incremental(self):
         from incremental_save import Snapshot

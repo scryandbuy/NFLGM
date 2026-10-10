@@ -12,6 +12,22 @@ from session import Session
 
 
 class CompressedExportTests(unittest.TestCase):
+    def test_stream_preserves_json_key_types_unicode_and_large_records(self):
+        import portable_export
+        import league
+        data = {'mixed': {1: 'é🏈', None: True, False: [np.int64(3), -0.0]},
+                'records': [{str(i): 'history' * 100} for i in range(2000)],
+                'long_note': 'a' * (1024 * 1024), 'empty': [{}, []]}
+        encoded = b''.join(portable_export.chunks(data, league._session_json_default))
+        self.assertEqual(gzip.decompress(encoded).decode(),
+                         json.dumps(data, default=league._session_json_default, separators=(',', ':')))
+
+    def test_export_never_constructs_a_compressed_temporary_file(self):
+        s = Session(League(2033), np.random.default_rng(71), None)
+        with patch('builtins.open', side_effect=AssertionError('temporary file')):
+            blocks = list(s.export_chunks())
+        self.assertEqual(gzip.decompress(b''.join(blocks)).decode(), s.save())
+
     def test_exact_save_bytes_and_rng(self):
         s = Session(League(2033), np.random.default_rng(71), None)
         s.gameday = {'name': 'René 🏈', 'flag': np.bool_(True),

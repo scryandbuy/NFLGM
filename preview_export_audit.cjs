@@ -12,7 +12,7 @@ document.querySelector('button').onclick=async()=>{
   let input=await(await fetch('/save')).blob(); const originalBytes=input.size;
   await loadSessionFromBlob(input); input=null;
   say('Exporting compressed franchise…'); await new Promise(r=>setTimeout(r,30));
-  const start=performance.now(), blob=exportSessionBlob(), exportSeconds=(performance.now()-start)/1000;
+  const start=performance.now(), blob=await exportSessionBlob(), exportSeconds=(performance.now()-start)/1000;
   if(py.FS.analyzePath('/nflgm-export-save.json.gz').exists)throw Error('temporary export retained');
   say('Checking every decompressed byte…');
   // Python hashlib updates one bounded chunk at a time, never a giant bridge string.

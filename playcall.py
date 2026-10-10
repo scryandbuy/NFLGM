@@ -311,6 +311,18 @@ def audible(off_call, def_call, off, rate_fn, rng, latitude=None, family_mix=Non
     look = read_the_look(def_call)
     call = dict(off_call)
 
+    # A planner-selected end-zone attempt has already priced the remaining
+    # scoring window. Preserve that objective when reading pressure or a light
+    # box; a routine screen/run check would discard the planned kick fallback.
+    # Man coverage can still change the concept, but not the scoring objective.
+    if call.get('end_zone_attempt'):
+        if call.get('is_pass') and look['looks_man']:
+            concept = call_pass(off, 'explosive', rate_fn, rng, allow_screen=False)
+            if S.CONCEPTS.get(concept, {}).get('depth') == 'deep':
+                call.update(concept=concept, depth='deep', play_action=False)
+                return call, 'depth'
+        return off_call, None
+
     # ---- the reads, in the order a quarterback actually makes them ----
     if not call.get('is_pass') and look['looks_heavy']:
         # they have loaded the box against a run - get out of it

@@ -195,6 +195,7 @@ class SeasonRunner(StandingsView):
                  plan=asdict(st.plan), base_plan=asdict(st.base_plan),
                  script=dict(st.script.__dict__), coach=copy.deepcopy(st.coach),
                  scheme=copy.deepcopy(st.scheme),
+                 season_rest=copy.deepcopy(getattr(st, "season_rest", {})),
                  memories={unit: dict(series=mem.series, window=mem.window,
                           by_series={str(k): dict(v) for k, v in mem.by_series.items()})
                            for unit, mem in st.memories.items()},
@@ -217,6 +218,7 @@ class SeasonRunner(StandingsView):
         identity_skill = float((getattr(st, 'coach_base', None) or st.coach)
                                .get('adjust_skill', .5))
         st.defer_recovery = d.get('defer_recovery', True)
+        st.season_rest = copy.deepcopy(d.get('season_rest') or {})
         if 'roster' in d: st.roster = d['roster']
         st.cond.cond = dict(d.get('cond') or {})
         st.cond.snaps = dict(d.get('cond_snaps') or {})
@@ -418,7 +420,14 @@ class SeasonRunner(StandingsView):
             raise GA.FieldabilityError(f'Week {week}: {abbr} has no valid game roster')
         return roster
 
+    def _season_stakes(self, home, away, week, playoffs):
+        from season_rest_context import contexts
+        stakes = contexts(self.L, week, playoffs)
+        for side in (home, away):
+            self.states[side].season_rest = stakes[side]
+
     def play(self, home, away, week, playoffs=False):
+        self._season_stakes(home, away, week, playoffs)
         self.prepare_practice(week, (home, away))
         hr = self.require_available(home, week, playoffs)
         ar = self.require_available(away, week, playoffs)
@@ -479,6 +488,7 @@ class SeasonRunner(StandingsView):
             hr, ar = self.states[home].roster, self.states[away].roster
             start = copy.deepcopy(replay_start)
         else:
+            self._season_stakes(home, away, week, playoffs)
             self.prepare_practice(week, (home, away))
             hr = self.require_available(home, week, playoffs)
             ar = self.require_available(away, week, playoffs)
